@@ -4,6 +4,7 @@ use macroquad::{
     shapes::{draw_circle, draw_rectangle},
     window::{clear_background, next_frame, screen_height, screen_width},
 };
+use neural_network_study::NeuralNetwork;
 use rand::prelude::*;
 
 const SPEED: f32 = 0.8;
@@ -16,12 +17,13 @@ const FELLER_R: f32 = 20.0;
 
 #[macroquad::main("Flappy Feller")]
 async fn main() {
-    let mut rng = rand::rng();
+    let mut rng = StdRng::from_os_rng();
     let mut pipes: Vec<Pipe> = vec![];
     let mut feller = Feller {
         y: 0.0,
         yspeed: 0.0,
     };
+    let mut nn = NeuralNetwork::new(5, 4, 2, Some(&mut rng));
 
     loop {
         clear_background(WHITE);
@@ -44,11 +46,26 @@ async fn main() {
         pipes.retain(|p| p.x + PIPE_WIDTH > 0.0);
 
         // update the feller
-        if is_key_pressed(KeyCode::Space) {
-            feller.yspeed -= LIFT;
+        // if is_key_pressed(KeyCode::Space) {
+        //     feller.yspeed -= LIFT;
+        // }
+
+        if let Some(pipe) = pipes.first() {
+            let input = vec![
+                (feller.y / screen_height()) as f64,
+                (feller.yspeed / MAX_SPEED) as f64,
+                (pipe.x / screen_width()) as f64,
+                (pipe.y1 / screen_height()) as f64,
+                (pipe.y2 / screen_height()) as f64,
+            ];
+            let output = nn.predict(input);
+            if output[0] > output[1] {
+                feller.yspeed -= LIFT;
+            }
         }
+
         feller.yspeed = (feller.yspeed + 0.02).clamp(-MAX_SPEED, MAX_SPEED);
-        feller.y += feller.yspeed;
+        feller.y = (feller.y + feller.yspeed).clamp(FELLER_R, screen_height() - FELLER_R);
 
         // draw pipes
         for pipe in &pipes {
