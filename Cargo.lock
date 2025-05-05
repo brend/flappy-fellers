@@ -118,6 +118,8 @@ dependencies = [
  "macroquad",
  "neural-network-study",
  "rand",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

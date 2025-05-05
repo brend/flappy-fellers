@@ -1,12 +1,15 @@
 use macroquad::{
     color::*,
     input::{KeyCode, is_key_pressed},
-    shapes::{draw_circle, draw_rectangle},
+    prelude::ImageFormat,
+    shapes::draw_rectangle,
     text::draw_text,
+    texture::{Texture2D, draw_texture},
     window::{clear_background, next_frame, screen_height, screen_width},
 };
 use neural_network_study::{ActivationFunction, NeuralNetwork};
 use rand::prelude::*;
+use serde::{Deserialize, Serialize};
 
 const HSPEED: f32 = 0.8;
 const MAX_SPEED: f32 = 2.0;
@@ -32,6 +35,11 @@ async fn main() {
     let mut iterations_per_frame = 1;
     let mut steps = 0;
     let mut generation = 1;
+
+    let walden_sprite = Texture2D::from_file_with_format(
+        include_bytes!("../assets/walden.png"),
+        Some(ImageFormat::Png),
+    );
 
     loop {
         clear_background(WHITE);
@@ -75,8 +83,14 @@ async fn main() {
         // draw the feller
         for feller in &population.fellers {
             if feller.is_alive {
-                let color = Color::from_rgba(0, 0, 0, 64);
-                draw_circle(FELLER_X, feller.y, FELLER_R, color);
+                // let color = Color::from_rgba(0, 0, 0, 64);
+                // draw_circle(FELLER_X, feller.y, FELLER_R, color);
+                draw_texture(
+                    &walden_sprite,
+                    FELLER_X,
+                    feller.y,
+                    Color::from_rgba(255, 255, 255, 100),
+                );
             }
         }
 
@@ -189,6 +203,7 @@ impl Pipe {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 struct Feller {
     y: f32,
     yspeed: f32,
@@ -270,16 +285,21 @@ impl Population {
             .fellers
             .into_iter()
             .map(|p| (score(&p), p))
+            .map(|(s, p)| (s * s, p))
             .collect::<Vec<_>>();
         scored_fellers.sort_by(|a, b| b.0.total_cmp(&a.0));
         let keep_len = (POPULATION_SIZE as f64 * 0.05).ceil() as usize;
         scored_fellers.truncate(keep_len);
 
-        // compute the sum of all scores
+        // normalize scores
         let mut score_sum = 0.0;
         for (score, _) in &scored_fellers {
             score_sum += score;
         }
+        let scored_fellers = scored_fellers
+            .into_iter()
+            .map(|(s, f)| (s / score_sum, f))
+            .collect::<Vec<_>>();
 
         let mut descendants = vec![];
         let mut rng = StdRng::from_os_rng();
@@ -288,7 +308,7 @@ impl Population {
         // while the highest scorers are most likely to procreate
         let procreation_len = (0.8 * POPULATION_SIZE as f64).ceil() as usize;
         while descendants.len() < procreation_len {
-            let mut r = rng.random_range(0.0..score_sum);
+            let mut r = rng.random_range(0.0..1.0);
 
             for (score, feller) in &scored_fellers {
                 r -= score;
