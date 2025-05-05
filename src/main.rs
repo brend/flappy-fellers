@@ -1,5 +1,6 @@
 use macroquad::{
     color::*,
+    input::{KeyCode, is_key_pressed},
     shapes::{draw_circle, draw_rectangle},
     window::{clear_background, next_frame, screen_height, screen_width},
 };
@@ -20,50 +21,21 @@ async fn main() {
     let nn = NeuralNetwork::new(5, 4, 2, Some(&mut rng));
     let mut pipes: Vec<Pipe> = vec![];
     let mut feller = Feller::new();
+    let mut iterations_per_frame = 1;
 
     loop {
         clear_background(WHITE);
 
-        // spawn a new pipe with a certain probability
-        if pipes.is_empty() || rng.random::<f32>() < PIPE_PROBABILITY {
-            let spawn_allowed = match pipes.last() {
-                Some(pipe) => pipe.x + 2.0 * PIPE_WIDTH < screen_width(),
-                None => true,
-            };
-            if spawn_allowed {
-                pipes.push(Pipe::random(&mut rng));
-            }
+        if is_key_pressed(KeyCode::S) {
+            iterations_per_frame += 1;
+        } else if is_key_pressed(KeyCode::A) {
+            iterations_per_frame -= 1;
         }
+        iterations_per_frame = iterations_per_frame.clamp(1, 100);
 
-        // update pipes
-        for pipe in pipes.iter_mut() {
-            pipe.x -= HSPEED;
+        for _ in 0..iterations_per_frame {
+            advance_game(&mut pipes, &mut feller, &nn, &mut rng);
         }
-        pipes.retain(|p| p.x + PIPE_WIDTH > 0.0);
-
-        // update the feller based on the neural network's output
-        // if is_key_pressed(KeyCode::Space) {
-        //     feller.yspeed -= LIFT;
-        // }
-        if let Some(pipe) = pipes.first() {
-            let w = screen_width();
-            let h = screen_height();
-            let input = vec![
-                (feller.y / h) as f64,
-                (feller.yspeed / MAX_SPEED) as f64,
-                (pipe.x / w) as f64,
-                (pipe.y1 / h) as f64,
-                (pipe.y2 / h) as f64,
-            ];
-            let output = nn.predict(input);
-            if output[0] > output[1] {
-                feller.yspeed -= LIFT;
-            }
-        }
-
-        // Update the feller's vertical speed with gravitation and clamping
-        feller.yspeed = (feller.yspeed + 0.02).clamp(-MAX_SPEED, MAX_SPEED);
-        feller.y = (feller.y + feller.yspeed).clamp(FELLER_R, screen_height() - FELLER_R);
 
         // draw pipes
         for pipe in &pipes {
@@ -91,6 +63,49 @@ async fn main() {
 
         next_frame().await
     }
+}
+
+fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, nn: &NeuralNetwork, rng: &mut StdRng) {
+    // spawn a new pipe with a certain probability
+    if pipes.is_empty() || rng.random::<f32>() < PIPE_PROBABILITY {
+        let spawn_allowed = match pipes.last() {
+            Some(pipe) => pipe.x + 2.0 * PIPE_WIDTH < screen_width(),
+            None => true,
+        };
+        if spawn_allowed {
+            pipes.push(Pipe::random(rng));
+        }
+    }
+
+    // update pipes
+    for pipe in pipes.iter_mut() {
+        pipe.x -= HSPEED;
+    }
+    pipes.retain(|p| p.x + PIPE_WIDTH > 0.0);
+
+    // update the feller based on the neural network's output
+    // if is_key_pressed(KeyCode::Space) {
+    //     feller.yspeed -= LIFT;
+    // }
+    if let Some(pipe) = pipes.first() {
+        let w = screen_width();
+        let h = screen_height();
+        let input = vec![
+            (feller.y / h) as f64,
+            (feller.yspeed / MAX_SPEED) as f64,
+            (pipe.x / w) as f64,
+            (pipe.y1 / h) as f64,
+            (pipe.y2 / h) as f64,
+        ];
+        let output = nn.predict(input);
+        if output[0] > output[1] {
+            feller.yspeed -= LIFT;
+        }
+    }
+
+    // Update the feller's vertical speed with gravitation and clamping
+    feller.yspeed = (feller.yspeed + 0.02).clamp(-MAX_SPEED, MAX_SPEED);
+    feller.y = (feller.y + feller.yspeed).clamp(FELLER_R, screen_height() - FELLER_R);
 }
 
 struct Pipe {
