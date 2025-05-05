@@ -112,7 +112,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "flappy"
+name = "flappy-fellers"
 version = "0.1.0"
 dependencies = [
  "macroquad",

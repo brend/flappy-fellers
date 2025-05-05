@@ -20,13 +20,15 @@ const PIPE_MIN_DISTANCE: f32 = 160.0;
 const LIFT: f32 = 2.0;
 const FELLER_X: f32 = 40.0;
 const FELLER_R: f32 = 20.0;
+
+const POPULATION_SIZE: usize = 150;
 const MUTATION_RATE: f64 = 0.1;
 
 #[macroquad::main("Flappy Feller")]
 async fn main() {
     let mut rng = StdRng::from_os_rng();
     let mut pipes: Vec<Pipe> = vec![];
-    let mut population = Population::new(100);
+    let mut population = Population::new(POPULATION_SIZE);
     let mut iterations_per_frame = 1;
     let mut steps = 0;
     let mut generation = 1;
@@ -260,22 +262,17 @@ impl Population {
         count
     }
 
-    fn size(&self) -> usize {
-        self.fellers.len()
-    }
-
     fn from_predecessors(predecessors: Population) -> Population {
         // compute a score for each feller
         // then sort them by descending score
         // and retain only the top 5%
-        let population_size = predecessors.size();
         let mut scored_fellers = predecessors
             .fellers
             .into_iter()
             .map(|p| (score(&p), p))
             .collect::<Vec<_>>();
         scored_fellers.sort_by(|a, b| b.0.total_cmp(&a.0));
-        let keep_len = (population_size as f64 * 0.05).ceil() as usize;
+        let keep_len = (POPULATION_SIZE as f64 * 0.05).ceil() as usize;
         scored_fellers.truncate(keep_len);
 
         // compute the sum of all scores
@@ -289,7 +286,7 @@ impl Population {
 
         // create 80% of the new descendants by random picking
         // while the highest scorers are most likely to procreate
-        let procreation_len = (0.8 * population_size as f64).ceil() as usize;
+        let procreation_len = (0.8 * POPULATION_SIZE as f64).ceil() as usize;
         while descendants.len() < procreation_len {
             let mut r = rng.random_range(0.0..score_sum);
 
@@ -305,7 +302,7 @@ impl Population {
         }
 
         // fill up the remaining slots with random new fellers
-        while descendants.len() < population_size {
+        while descendants.len() < POPULATION_SIZE {
             descendants.push(Feller::new());
         }
 
