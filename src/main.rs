@@ -18,7 +18,6 @@ const FELLER_R: f32 = 20.0;
 #[macroquad::main("Flappy Feller")]
 async fn main() {
     let mut rng = StdRng::from_os_rng();
-    let nn = NeuralNetwork::new(5, 4, 2, Some(&mut rng));
     let mut pipes: Vec<Pipe> = vec![];
     let mut feller = Feller::new();
     let mut iterations_per_frame = 1;
@@ -34,7 +33,7 @@ async fn main() {
         iterations_per_frame = iterations_per_frame.clamp(1, 100);
 
         for _ in 0..iterations_per_frame {
-            advance_game(&mut pipes, &mut feller, &nn, &mut rng);
+            advance_game(&mut pipes, &mut feller, &mut rng);
         }
 
         // draw pipes
@@ -65,7 +64,7 @@ async fn main() {
     }
 }
 
-fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, nn: &NeuralNetwork, rng: &mut StdRng) {
+fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, rng: &mut StdRng) {
     // spawn a new pipe with a certain probability
     if pipes.is_empty() || rng.random::<f32>() < PIPE_PROBABILITY {
         let spawn_allowed = match pipes.last() {
@@ -97,7 +96,7 @@ fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, nn: &NeuralNetwork, 
             (pipe.y1 / h) as f64,
             (pipe.y2 / h) as f64,
         ];
-        let output = nn.predict(input);
+        let output = feller.predict(input);
         if output[0] > output[1] {
             feller.yspeed -= LIFT;
         }
@@ -129,13 +128,21 @@ impl Pipe {
 struct Feller {
     y: f32,
     yspeed: f32,
+    brain: NeuralNetwork,
 }
 
 impl Feller {
     fn new() -> Feller {
+        let mut rng = StdRng::from_os_rng();
+        let brain = NeuralNetwork::new(5, 4, 2, Some(&mut rng));
         Feller {
-            y: 0.0,
+            y: screen_height() / 3.0,
             yspeed: 0.0,
+            brain,
         }
+    }
+
+    fn predict(&self, input: Vec<f64>) -> Vec<f64> {
+        self.brain.predict(input)
     }
 }
