@@ -11,31 +11,45 @@ use neural_network_study::{ActivationFunction, NeuralNetwork};
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
+/// Speed at which the pipes move in pixels per iteration
 const HSPEED: f32 = 0.8;
-const MAX_SPEED: f32 = 2.0;
-
+/// Maximum vertical speed of a flappy feller
+const FELLER_MAX_SPEED: f32 = 2.0;
+/// Probability of spawning a pipe during an iteration
 const PIPE_PROBABILITY: f32 = 0.002;
+/// Pipe width
 const PIPE_WIDTH: f32 = 40.0;
+/// Minimum size of the pipe aperture (hole)
 const PIPE_MIN_APERTURE: f32 = 80.0;
+/// Maximum size of the pipe aperture
 const PIPE_MAX_APERTURE: f32 = 160.0;
+/// Minimum distance between two pipes
 const PIPE_MIN_DISTANCE: f32 = 160.0;
-
+/// Jumping force
 const LIFT: f32 = 2.0;
+/// x-coordinate of the fellers
 const FELLER_X: f32 = 40.0;
+/// body radius of the fellers
 const FELLER_R: f32 = 20.0;
-
+/// Number of fellers in each generation
 const POPULATION_SIZE: usize = 150;
+/// Probability of mutation of weights
+/// during cloning of neural network
 const MUTATION_RATE: f64 = 0.1;
 
+/// main function simulates and displays the game
 #[macroquad::main("Flappy Feller")]
 async fn main() {
     let mut rng = StdRng::from_os_rng();
     let mut pipes: Vec<Pipe> = vec![];
     let mut population = Population::new(POPULATION_SIZE);
+    // the number of steps simulated during each frame.
+    // this allows to speed up the training process
     let mut iterations_per_frame = 1;
+    // step counter used to score the fellers
     let mut steps = 0;
+    // generation counter used purely for visualization
     let mut generation = 1;
-
     let walden_sprite = Texture2D::from_file_with_format(
         include_bytes!("../assets/walden.png"),
         Some(ImageFormat::Png),
@@ -44,6 +58,8 @@ async fn main() {
     loop {
         clear_background(WHITE);
 
+        // handle user input:
+        // speeding up and slowing down the simulation
         if is_key_pressed(KeyCode::S) {
             iterations_per_frame += 1;
         } else if is_key_pressed(KeyCode::A) {
@@ -53,14 +69,17 @@ async fn main() {
         } else if is_key_pressed(KeyCode::Key9) {
             iterations_per_frame += 10;
         }
+
         iterations_per_frame = iterations_per_frame.clamp(1, 100);
 
+        // simulate one or more steps of the game
         for _ in 0..iterations_per_frame {
             simulate_step(&mut pipes, &mut population.fellers, &mut rng, steps);
             steps += 1;
         }
 
-        // check if population has died out
+        // spawn a new population
+        // once the current one has expired
         if !population.is_alive() {
             steps = 0;
             generation += 1;
@@ -112,7 +131,8 @@ async fn main() {
     }
 }
 
-fn simulate_step(pipes: &mut Vec<Pipe>, fellers: &mut Vec<Feller>, rng: &mut StdRng, step: i32) {
+/// simulate a single step of the game
+fn simulate_step(pipes: &mut Vec<Pipe>, fellers: &mut [Feller], rng: &mut StdRng, step: i32) {
     simulate_pipes(pipes, rng);
 
     for feller in fellers.iter_mut() {
@@ -122,6 +142,7 @@ fn simulate_step(pipes: &mut Vec<Pipe>, fellers: &mut Vec<Feller>, rng: &mut Std
     }
 }
 
+/// move the pipes ahead, occasionally spawning new ones
 fn simulate_pipes(pipes: &mut Vec<Pipe>, rng: &mut StdRng) {
     // spawn a new pipe with a certain probability
     if pipes.is_empty() || rng.random::<f32>() < PIPE_PROBABILITY {
@@ -138,9 +159,13 @@ fn simulate_pipes(pipes: &mut Vec<Pipe>, rng: &mut StdRng) {
     for pipe in pipes.iter_mut() {
         pipe.x -= HSPEED;
     }
+
+    // remove pipes that have left the screen
     pipes.retain(|p| p.x + PIPE_WIDTH > 0.0);
 }
 
+/// move a feller according to gravity and input (jumping)
+/// and check for collisions with environment objects
 fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>, step: i32) {
     // update the feller based on the neural network's output
     let closest_pipe = pipes.iter().find(|&p| p.x > FELLER_X);
@@ -149,7 +174,7 @@ fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>, step: i32) {
         let h = screen_height();
         let input = vec![
             (feller.y / h) as f64,
-            (feller.yspeed / MAX_SPEED) as f64,
+            (feller.yspeed / FELLER_MAX_SPEED) as f64,
             (pipe.x / w) as f64,
             (pipe.y1 / h) as f64,
             (pipe.y2 / h) as f64,
@@ -161,7 +186,7 @@ fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>, step: i32) {
     }
 
     // Update the feller's vertical speed with gravitation
-    feller.yspeed = (feller.yspeed + 0.02).clamp(-MAX_SPEED, MAX_SPEED);
+    feller.yspeed = (feller.yspeed + 0.02).clamp(-FELLER_MAX_SPEED, FELLER_MAX_SPEED);
     feller.y += feller.yspeed;
 
     // Check for collisions with ceiling and floor
@@ -181,17 +206,25 @@ fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>, step: i32) {
     }
 }
 
+/// compute a score for a feller
 fn score(feller: &Feller) -> f32 {
     feller.steps_survived as f32
 }
 
+/// Pipes are the fellers' main obstacles.
+/// Fellers must fly through the hole in the middle
+/// of the pipe to survive.
 struct Pipe {
+    /// x-coordinate of the pipe
     x: f32,
+    /// y-coordinate of the top of the hole
     y1: f32,
+    /// y-coordinate of the bottom of the hole
     y2: f32,
 }
 
 impl Pipe {
+    /// create a pipe with a randomized hole
     pub fn random(rng: &mut StdRng) -> Pipe {
         let y1 = rng.random_range(100.0..200.0);
         let y2 = y1 + rng.random_range(PIPE_MIN_APERTURE..PIPE_MAX_APERTURE);
@@ -203,16 +236,26 @@ impl Pipe {
     }
 }
 
+/// Flappy fellers are the heroes of this story.
+/// They are being controlled by an evolving AI.
 #[derive(Serialize, Deserialize)]
 struct Feller {
+    /// y-coordinate of the feller
     y: f32,
+    /// vertical speed of the feller
     yspeed: f32,
+    /// the AI that controls the feller
     brain: NeuralNetwork,
+    /// flag indicating if the feller is still alive
     is_alive: bool,
+    /// counter of how many simulation steps
+    /// this feller has survived
     steps_survived: i32,
 }
 
 impl Feller {
+    /// Creates a new feller with a randomized neural network
+    /// for a brain and at the default height
     fn new() -> Feller {
         let mut rng = StdRng::from_os_rng();
         let mut brain = NeuralNetwork::new(5, 4, 2, Some(&mut rng));
@@ -226,14 +269,18 @@ impl Feller {
         }
     }
 
+    /// ask the feller for their move during a simulation step
     fn predict(&self, input: Vec<f64>) -> Vec<f64> {
         self.brain.predict(input)
     }
 
+    /// mutate the brain of the feller 🧟‍♂️
     fn mutate(&mut self, rng: &mut StdRng) {
         self.brain.mutate(rng, MUTATION_RATE);
     }
 
+    /// create a new feller with a clone of this one's brain
+    /// and otherwise default properties
     fn spawn(&self) -> Feller {
         Feller {
             y: screen_height() / 3.0,
@@ -245,11 +292,13 @@ impl Feller {
     }
 }
 
+/// A collection of fellers
 struct Population {
     fellers: Vec<Feller>,
 }
 
 impl Population {
+    /// Create a new population of fellers of the desired size
     fn new(size: usize) -> Population {
         let mut fellers = vec![];
         for _ in 0..size {
@@ -258,15 +307,19 @@ impl Population {
         Population { fellers }
     }
 
+    /// Determines if the population is still alive.
+    /// A population is alive if at least one of its fellers
+    /// is still alive.
     fn is_alive(&self) -> bool {
         for feller in &self.fellers {
             if feller.is_alive {
                 return true;
             }
         }
-        return false;
+        false
     }
 
+    /// Returns the number of fellers that are still alive
     fn survivor_count(&self) -> usize {
         let mut count = 0;
         for feller in &self.fellers {
@@ -277,6 +330,9 @@ impl Population {
         count
     }
 
+    /// Spawn a new population of fellers
+    /// by scoring the ones in this generation
+    /// and cloning the best ones
     fn from_predecessors(predecessors: Population) -> Population {
         // compute a score for each feller
         // then sort them by descending score
