@@ -19,7 +19,7 @@ const FELLER_R: f32 = 20.0;
 async fn main() {
     let mut rng = StdRng::from_os_rng();
     let mut pipes: Vec<Pipe> = vec![];
-    let mut feller = Feller::new();
+    let mut population = Population::new(100);
     let mut iterations_per_frame = 1;
 
     loop {
@@ -33,38 +33,40 @@ async fn main() {
         iterations_per_frame = iterations_per_frame.clamp(1, 100);
 
         for _ in 0..iterations_per_frame {
-            advance_game(&mut pipes, &mut feller, &mut rng);
+            simulate_step(&mut pipes, &mut population.fellers, &mut rng);
         }
 
         // draw pipes
         for pipe in &pipes {
-            // check for collision
-            let color = if (pipe.x - FELLER_X).abs() < FELLER_R
-                && (feller.y - FELLER_R < pipe.y1 || feller.y + FELLER_R > pipe.y2)
-            {
-                RED
-            } else {
-                BLACK
-            };
-
-            draw_rectangle(pipe.x, 0.0, PIPE_WIDTH, pipe.y1, color);
+            draw_rectangle(pipe.x, 0.0, PIPE_WIDTH, pipe.y1, BLACK);
             draw_rectangle(
                 pipe.x,
                 pipe.y2,
                 PIPE_WIDTH,
                 screen_height() - pipe.y2,
-                color,
+                BLACK,
             );
         }
 
         // draw the feller
-        draw_circle(FELLER_X, feller.y, FELLER_R, BLACK);
+        for feller in &population.fellers {
+            let color = Color::from_rgba(0, 0, 0, 64);
+            draw_circle(FELLER_X, feller.y, FELLER_R, color);
+        }
 
         next_frame().await
     }
 }
 
-fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, rng: &mut StdRng) {
+fn simulate_step(pipes: &mut Vec<Pipe>, fellers: &mut Vec<Feller>, rng: &mut StdRng) {
+    simulate_pipes(pipes, rng);
+
+    for feller in fellers.iter_mut() {
+        simulate_feller(feller, pipes);
+    }
+}
+
+fn simulate_pipes(pipes: &mut Vec<Pipe>, rng: &mut StdRng) {
     // spawn a new pipe with a certain probability
     if pipes.is_empty() || rng.random::<f32>() < PIPE_PROBABILITY {
         let spawn_allowed = match pipes.last() {
@@ -81,11 +83,10 @@ fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, rng: &mut StdRng) {
         pipe.x -= HSPEED;
     }
     pipes.retain(|p| p.x + PIPE_WIDTH > 0.0);
+}
 
+fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>) {
     // update the feller based on the neural network's output
-    // if is_key_pressed(KeyCode::Space) {
-    //     feller.yspeed -= LIFT;
-    // }
     if let Some(pipe) = pipes.first() {
         let w = screen_width();
         let h = screen_height();
@@ -105,6 +106,15 @@ fn advance_game(pipes: &mut Vec<Pipe>, feller: &mut Feller, rng: &mut StdRng) {
     // Update the feller's vertical speed with gravitation and clamping
     feller.yspeed = (feller.yspeed + 0.02).clamp(-MAX_SPEED, MAX_SPEED);
     feller.y = (feller.y + feller.yspeed).clamp(FELLER_R, screen_height() - FELLER_R);
+
+    // Check for collisions
+    for pipe in pipes {
+        if (pipe.x - FELLER_X).abs() < FELLER_R
+            && (feller.y - FELLER_R < pipe.y1 || feller.y + FELLER_R > pipe.y2)
+        {
+            feller.is_alive = false;
+        }
+    }
 }
 
 struct Pipe {
@@ -129,6 +139,7 @@ struct Feller {
     y: f32,
     yspeed: f32,
     brain: NeuralNetwork,
+    is_alive: bool,
 }
 
 impl Feller {
@@ -139,10 +150,26 @@ impl Feller {
             y: screen_height() / 3.0,
             yspeed: 0.0,
             brain,
+            is_alive: true,
         }
     }
 
     fn predict(&self, input: Vec<f64>) -> Vec<f64> {
         self.brain.predict(input)
+    }
+}
+
+struct Population {
+    size: usize,
+    fellers: Vec<Feller>,
+}
+
+impl Population {
+    fn new(size: usize) -> Population {
+        let mut fellers = vec![];
+        for _ in 0..size {
+            fellers.push(Feller::new());
+        }
+        Population { size, fellers }
     }
 }
