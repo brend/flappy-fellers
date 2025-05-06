@@ -336,23 +336,12 @@ impl Population {
     /// A population is alive if at least one of its fellers
     /// is still alive.
     fn is_alive(&self) -> bool {
-        for feller in &self.fellers {
-            if feller.is_alive {
-                return true;
-            }
-        }
-        false
+        self.fellers.iter().any(|f| f.is_alive)
     }
 
     /// Returns the number of fellers that are still alive
     fn survivor_count(&self) -> usize {
-        let mut count = 0;
-        for feller in &self.fellers {
-            if feller.is_alive {
-                count += 1;
-            }
-        }
-        count
+        self.fellers.iter().filter(|f| f.is_alive).count()
     }
 
     /// Spawn a new population of fellers
