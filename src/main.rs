@@ -41,7 +41,9 @@ const MUTATION_RATE: f64 = 0.1;
 #[macroquad::main("Flappy Feller")]
 async fn main() {
     let mut rng = StdRng::from_os_rng();
+    // a vec to hold the pipes for fellers to crash into
     let mut pipes: Vec<Pipe> = vec![];
+    // a collection of fellers flapping alongside each other
     let mut population = Population::new(POPULATION_SIZE);
     // the number of steps simulated during each frame.
     // this allows to speed up the training process
@@ -50,27 +52,14 @@ async fn main() {
     let mut steps = 0;
     // generation counter used purely for visualization
     let mut generation = 1;
+    // graphics resources
     let walden_sprite = Texture2D::from_file_with_format(
         include_bytes!("../assets/walden.png"),
         Some(ImageFormat::Png),
     );
 
     loop {
-        clear_background(WHITE);
-
-        // handle user input:
-        // speeding up and slowing down the simulation
-        if is_key_pressed(KeyCode::S) {
-            iterations_per_frame += 1;
-        } else if is_key_pressed(KeyCode::A) {
-            iterations_per_frame -= 1;
-        } else if is_key_pressed(KeyCode::Key0) {
-            iterations_per_frame = 1;
-        } else if is_key_pressed(KeyCode::Key9) {
-            iterations_per_frame += 10;
-        }
-
-        iterations_per_frame = iterations_per_frame.clamp(1, 100);
+        handle_input(&mut iterations_per_frame);
 
         // simulate one or more steps of the game
         for _ in 0..iterations_per_frame {
@@ -78,8 +67,7 @@ async fn main() {
             steps += 1;
         }
 
-        // spawn a new population
-        // once the current one has expired
+        // spawn a new population once the current one has expired
         if !population.is_alive() {
             steps = 0;
             generation += 1;
@@ -87,51 +75,87 @@ async fn main() {
             population = Population::from_predecessors(population);
         }
 
-        // draw pipes
-        for pipe in &pipes {
-            draw_rectangle(pipe.x, 0.0, PIPE_WIDTH, pipe.y1, BLACK);
-            draw_rectangle(
-                pipe.x,
-                pipe.y2,
-                PIPE_WIDTH,
-                screen_height() - pipe.y2,
-                BLACK,
-            );
-        }
-
-        // draw the feller
-        for feller in &population.fellers {
-            if feller.is_alive {
-                // let color = Color::from_rgba(0, 0, 0, 64);
-                // draw_circle(FELLER_X, feller.y, FELLER_R, color);
-                draw_texture(
-                    &walden_sprite,
-                    FELLER_X,
-                    feller.y,
-                    Color::from_rgba(255, 255, 255, 100),
-                );
-            }
-        }
-
-        // draw the HUD
-        draw_text(
-            &format!(
-                "Generation {}; Fellers: {}; Speed: {}",
-                generation,
-                population.survivor_count(),
-                iterations_per_frame
-            ),
-            20.0,
-            20.0,
-            20.0,
-            BLUE,
+        draw_scene(
+            &pipes,
+            &population,
+            &walden_sprite,
+            generation,
+            iterations_per_frame,
         );
 
         next_frame().await
     }
 }
 
-/// simulate a single step of the game
+/// Draws the game state: fellers, pipes and HUD
+fn draw_scene(
+    pipes: &[Pipe],
+    population: &Population,
+    walden_sprite: &Texture2D,
+    generation: usize,
+    iterations_per_frame: usize,
+) {
+    // draw the scene
+    clear_background(WHITE);
+
+    // draw pipes
+    for pipe in pipes {
+        draw_rectangle(pipe.x, 0.0, PIPE_WIDTH, pipe.y1, BLACK);
+        draw_rectangle(
+            pipe.x,
+            pipe.y2,
+            PIPE_WIDTH,
+            screen_height() - pipe.y2,
+            BLACK,
+        );
+    }
+
+    // draw the feller
+    for feller in &population.fellers {
+        if feller.is_alive {
+            // let color = Color::from_rgba(0, 0, 0, 64);
+            // draw_circle(FELLER_X, feller.y, FELLER_R, color);
+            draw_texture(
+                walden_sprite,
+                FELLER_X,
+                feller.y,
+                Color::from_rgba(255, 255, 255, 100),
+            );
+        }
+    }
+
+    // draw the HUD
+    draw_text(
+        &format!(
+            "Generation {}; Fellers: {}; Speed: {}",
+            generation,
+            population.survivor_count(),
+            iterations_per_frame
+        ),
+        20.0,
+        20.0,
+        20.0,
+        BLUE,
+    );
+}
+
+/// Handle keyboard input from the user
+fn handle_input(iterations_per_frame: &mut usize) {
+    // speeding up and slowing down the simulation
+    if is_key_pressed(KeyCode::S) {
+        *iterations_per_frame += 1;
+    } else if is_key_pressed(KeyCode::A) {
+        *iterations_per_frame -= 1;
+    } else if is_key_pressed(KeyCode::Key0) {
+        *iterations_per_frame = 1;
+    } else if is_key_pressed(KeyCode::Key9) {
+        *iterations_per_frame += 10;
+    }
+
+    *iterations_per_frame = (*iterations_per_frame).clamp(1, 100);
+}
+
+/// Simulates a single step of the game
 fn simulate_step(pipes: &mut Vec<Pipe>, fellers: &mut [Feller], rng: &mut StdRng, step: i32) {
     simulate_pipes(pipes, rng);
 
@@ -142,7 +166,7 @@ fn simulate_step(pipes: &mut Vec<Pipe>, fellers: &mut [Feller], rng: &mut StdRng
     }
 }
 
-/// move the pipes ahead, occasionally spawning new ones
+/// Move the pipes ahead, occasionally spawning new ones
 fn simulate_pipes(pipes: &mut Vec<Pipe>, rng: &mut StdRng) {
     // spawn a new pipe with a certain probability
     if pipes.is_empty() || rng.random::<f32>() < PIPE_PROBABILITY {
@@ -164,7 +188,7 @@ fn simulate_pipes(pipes: &mut Vec<Pipe>, rng: &mut StdRng) {
     pipes.retain(|p| p.x + PIPE_WIDTH > 0.0);
 }
 
-/// move a feller according to gravity and input (jumping)
+/// Move a feller according to gravity and input (jumping)
 /// and check for collisions with environment objects
 fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>, step: i32) {
     // update the feller based on the neural network's output
@@ -206,7 +230,7 @@ fn simulate_feller(feller: &mut Feller, pipes: &mut Vec<Pipe>, step: i32) {
     }
 }
 
-/// compute a score for a feller
+/// Compute a score for a feller
 fn score(feller: &Feller) -> f32 {
     feller.steps_survived as f32
 }
@@ -292,8 +316,9 @@ impl Feller {
     }
 }
 
-/// A collection of fellers
+/// Population of fellers that competete against each other
 struct Population {
+    /// The fellers of this generation
     fellers: Vec<Feller>,
 }
 
