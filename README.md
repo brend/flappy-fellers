@@ -6,4 +6,7 @@ Played by a neuroevolution AI that is evaluated by its performance, selected, mu
 
 Uses my [Neural Network Study](https://github.com/brend/neural-network-study) framework. Inspired by [The Coding Train](https://thecodingtrain.com/challenges/100-neuroevolution-flappy-bird).
 
-<img src="assets/flappy-fellers.gif">
+<figure>
+  <img src="assets/flappy-fellers.gif" alt="Picture of the game being played by the AI">
+  <figcaption>One flappy feller has developed the ability to navigate the maze.</figcaption>
+</figure>
